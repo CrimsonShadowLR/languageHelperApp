@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -70,8 +71,9 @@ class OverlayService : Service() {
     private fun setupOverlayView() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        // Inflate the overlay layout
-        overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_button, null)
+        // Inflate the overlay layout with app theme applied
+        val themedContext = ContextThemeWrapper(this, R.style.Theme_LanguageApp)
+        overlayView = LayoutInflater.from(themedContext).inflate(R.layout.overlay_button, null)
         overlayButton = overlayView!!.findViewById(R.id.overlayButton)
 
         // Configure window layout parameters
