@@ -1,3 +1,20 @@
 <resources>
-    <string name="app_name">languageApp</string>
+    <string name="app_name">Manga Overlay</string>
+
+    <!-- Button text -->
+    <string name="enable_overlay">Enable Overlay</string>
+    <string name="start_overlay">Start Overlay</string>
+    <string name="stop_overlay">Stop Overlay</string>
+
+    <!-- Status messages -->
+    <string name="status_checking">Checking status…</string>
+    <string name="status_permission_needed">Overlay permission required</string>
+    <string name="status_permission_granted">Permission granted</string>
+    <string name="status_overlay_active">Overlay is active</string>
+
+    <!-- Instructions -->
+    <string name="instructions">The floating button will appear over other apps. You can drag it anywhere on the screen. Tap it to use the translation feature (coming soon).</string>
+
+    <!-- Content descriptions -->
+    <string name="translate_button_description">Translate button</string>
 </resources>

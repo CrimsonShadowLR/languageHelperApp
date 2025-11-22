@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "languageApp"
+rootProject.name = "MangaOverlay"
 include(":app")
  

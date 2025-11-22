@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.example.languageapp"
+    namespace = "com.mangaoverlay.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.languageapp"
-        minSdk = 24
+        applicationId = "com.mangaoverlay.app"
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -36,12 +36,16 @@ android {
     }
     buildFeatures {
         compose = true
+        viewBinding = true
     }
 }
 
 dependencies {
 
+    // Core Android libraries
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
