@@ -3,7 +3,15 @@
     "allow": [
       "Bash(.gradlew assembleDebug --stacktrace)",
       "Bash(gradlew.bat assembleDebug:*)",
-      "Bash(cmd /c gradlew.bat assembleDebug --stacktrace)"
+      "Bash(cmd /c gradlew.bat assembleDebug --stacktrace)",
+      "Bash(Get-ChildItem -Path \"app\\src\\main\\res\\layout\" -File 2)",
+      "Bash($null)",
+      "Bash(Select-Object Name)",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"gradlew.bat assembleDebug --stacktrace\")",
+      "Bash(C:/Users/Crimson/Desktop/languageHelperApp/gradlew.bat assembleDebug --stacktrace)",
+      "Bash(C:/Users/Crimson/Desktop/languageHelperApp/gradlew.bat assembleDebug)",
+      "Bash(\"C:\\Users\\Crimson\\Desktop\\languageHelperApp\\gradlew.bat\" assembleDebug --stacktrace)"
     ],
     "deny": [],
     "ask": []

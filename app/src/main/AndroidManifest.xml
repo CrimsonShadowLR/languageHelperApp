@@ -30,6 +30,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Crop Activity for image cropping -->
+        <activity
+            android:name=".CropActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.LanguageApp" />
+
         <!-- Overlay Service -->
         <service
             android:name=".OverlayService"

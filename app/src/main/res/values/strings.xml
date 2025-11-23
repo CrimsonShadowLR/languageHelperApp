@@ -14,6 +14,16 @@
 
     <!-- Instructions -->
     <string name="instructions">The floating button will appear over other apps. You can drag it anywhere on the screen. Tap it to use the translation feature (coming soon).</string>
+    <string name="crop_instructions">Drag corners and edges to adjust the crop area</string>
+
+    <!-- Crop Activity -->
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="crop_and_translate">Crop &amp; Translate</string>
+
+    <!-- Loading dialog -->
+    <string name="loading_analyzing_manga">Analyzing manga panel…</string>
+    <string name="loading_translating">Translating text…</string>
 
     <!-- Content descriptions -->
     <string name="translate_button_description">Translate button</string>

@@ -1,11 +1,13 @@
 package com.mangaoverlay.app
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -18,6 +20,9 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.mangaoverlay.app.utils.ScreenCaptureManager
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Foreground service that displays a floating overlay button
@@ -28,6 +33,7 @@ class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
     private lateinit var overlayButton: FloatingActionButton
+    private var screenCaptureManager: ScreenCaptureManager? = null
 
     // For tracking drag gestures
     private var initialX = 0
@@ -50,6 +56,24 @@ class OverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Start as foreground service with notification
         startForeground(NOTIFICATION_ID, createNotification())
+
+        // Initialize screen capture if MediaProjection data is provided
+        val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra(MainActivity.EXTRA_MEDIA_PROJECTION_DATA, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra(MainActivity.EXTRA_MEDIA_PROJECTION_DATA)
+        }
+
+        data?.let { projectionData ->
+            if (screenCaptureManager == null) {
+                screenCaptureManager = ScreenCaptureManager(this).apply {
+                    initializeProjection(Activity.RESULT_OK, projectionData)
+                }
+                Toast.makeText(this, "Screen capture ready!", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         return START_STICKY // Restart service if killed by system
     }
 
@@ -59,6 +83,10 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Stop screen capture and clean up
+        screenCaptureManager?.stop()
+        screenCaptureManager = null
+
         // Remove the overlay view when service is destroyed
         overlayView?.let {
             windowManager.removeView(it)
@@ -158,10 +186,68 @@ class OverlayService : Service() {
     }
 
     /**
-     * Handle button click - shows toast for now (capture feature coming in Phase 2)
+     * Handle button click - capture screen and launch crop activity
      */
     private fun onButtonClicked() {
-        Toast.makeText(this, "Capture feature coming soon!", Toast.LENGTH_SHORT).show()
+        val captureManager = screenCaptureManager
+        if (captureManager == null || !captureManager.isInitialized()) {
+            Toast.makeText(this, "Screen capture not ready. Please restart the overlay.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Toast.makeText(this, "Capturing screen...", Toast.LENGTH_SHORT).show()
+
+        // Temporarily hide the overlay button for the capture
+        overlayView?.visibility = View.GONE
+
+        // Capture the screen after a short delay to ensure button is hidden
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            captureManager.captureScreen { bitmap ->
+                // Show the button again
+                overlayView?.visibility = View.VISIBLE
+
+                if (bitmap != null) {
+                    // Save the bitmap to a temporary file
+                    val screenshotFile = saveBitmapToFile(bitmap)
+                    if (screenshotFile != null) {
+                        // Launch CropActivity
+                        launchCropActivity(screenshotFile.absolutePath)
+                    } else {
+                        Toast.makeText(this, "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                    }
+                    bitmap.recycle()
+                } else {
+                    Toast.makeText(this, "Failed to capture screen", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, 200)
+    }
+
+    /**
+     * Save bitmap to temporary file
+     */
+    private fun saveBitmapToFile(bitmap: Bitmap): File? {
+        return try {
+            val file = File(cacheDir, "screenshot_${System.currentTimeMillis()}.png")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Launch the crop activity with the screenshot
+     */
+    private fun launchCropActivity(screenshotPath: String) {
+        val intent = Intent(this, CropActivity::class.java).apply {
+            putExtra(CropActivity.EXTRA_SCREENSHOT_PATH, screenshotPath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 
     /**

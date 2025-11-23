@@ -3,6 +3,7 @@ package com.mangaoverlay.app
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +18,11 @@ import com.mangaoverlay.app.utils.PermissionHelper
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var mediaProjectionManager: MediaProjectionManager
+
+    companion object {
+        const val EXTRA_MEDIA_PROJECTION_DATA = "media_projection_data"
+    }
 
     // Activity result launcher for overlay permission
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -26,8 +32,19 @@ class MainActivity : AppCompatActivity() {
 
         // Start service if permission was granted
         if (PermissionHelper.canDrawOverlays(this)) {
-            startOverlayService()
+            requestMediaProjectionPermission()
         }
+    }
+
+    // Activity result launcher for MediaProjection permission
+    private val mediaProjectionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            // Pass the MediaProjection permission to the service
+            startOverlayServiceWithProjection(result.data!!)
+        }
+        updateUI()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         setupClickListeners()
     }
 
@@ -94,9 +112,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun requestOverlayPermission() {
         if (PermissionHelper.canDrawOverlays(this)) {
-            // Permission already granted, start service
-            startOverlayService()
-            updateUI()
+            // Permission already granted, request MediaProjection permission
+            requestMediaProjectionPermission()
         } else {
             // Launch permission settings
             overlayPermissionLauncher.launch(
@@ -106,14 +123,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Start the overlay service
+     * Request MediaProjection permission for screen capture
      */
-    private fun startOverlayService() {
+    private fun requestMediaProjectionPermission() {
+        val intent = mediaProjectionManager.createScreenCaptureIntent()
+        mediaProjectionLauncher.launch(intent)
+    }
+
+    /**
+     * Start the overlay service with MediaProjection data
+     */
+    private fun startOverlayServiceWithProjection(data: Intent) {
         if (PermissionHelper.canDrawOverlays(this)) {
-            val intent = Intent(this, OverlayService::class.java)
+            val intent = Intent(this, OverlayService::class.java).apply {
+                putExtra(EXTRA_MEDIA_PROJECTION_DATA, data)
+            }
             startForegroundService(intent)
             updateUI()
         }
+    }
+
+    /**
+     * Start the overlay service (legacy method for compatibility)
+     */
+    private fun startOverlayService() {
+        requestMediaProjectionPermission()
     }
 
     /**
