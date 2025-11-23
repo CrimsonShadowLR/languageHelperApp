@@ -27,6 +27,10 @@ class ScreenCaptureManager(private val context: Context) {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
 
+    // Store permission data for recreating MediaProjection after each capture
+    private var storedResultCode: Int? = null
+    private var storedData: Intent? = null
+
     private val mediaProjectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     private val windowManager =
@@ -44,6 +48,11 @@ class ScreenCaptureManager(private val context: Context) {
      * Initialize MediaProjection with permission data
      */
     fun initializeProjection(resultCode: Int, data: Intent) {
+        // Store permission data for recreating MediaProjection after each capture
+        storedResultCode = resultCode
+        storedData = data
+
+        // Create initial MediaProjection
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
         // Register callback as required by Android API
         mediaProjection?.registerCallback(projectionCallback, handler)
@@ -54,6 +63,12 @@ class ScreenCaptureManager(private val context: Context) {
      * @param callback Callback with captured bitmap or error
      */
     fun captureScreen(callback: (Bitmap?) -> Unit) {
+        // Recreate MediaProjection if it was stopped after previous capture
+        if (mediaProjection == null && storedResultCode != null && storedData != null) {
+            mediaProjection = mediaProjectionManager.getMediaProjection(storedResultCode!!, storedData!!)
+            mediaProjection?.registerCallback(projectionCallback, handler)
+        }
+
         if (mediaProjection == null) {
             callback(null)
             return
@@ -94,6 +109,12 @@ class ScreenCaptureManager(private val context: Context) {
                 callback(null)
             } finally {
                 cleanup()
+                // Stop and release MediaProjection after each capture
+                // This is necessary because Android doesn't allow creating multiple
+                // VirtualDisplays from the same MediaProjection instance
+                mediaProjection?.unregisterCallback(projectionCallback)
+                mediaProjection?.stop()
+                mediaProjection = null
             }
         }, 100)
     }

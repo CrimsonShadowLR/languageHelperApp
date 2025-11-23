@@ -11,7 +11,8 @@
       "Bash(cmd /c \"gradlew.bat assembleDebug --stacktrace\")",
       "Bash(C:/Users/Crimson/Desktop/languageHelperApp/gradlew.bat assembleDebug --stacktrace)",
       "Bash(C:/Users/Crimson/Desktop/languageHelperApp/gradlew.bat assembleDebug)",
-      "Bash(\"C:\\Users\\Crimson\\Desktop\\languageHelperApp\\gradlew.bat\" assembleDebug --stacktrace)"
+      "Bash(\"C:\\Users\\Crimson\\Desktop\\languageHelperApp\\gradlew.bat\" assembleDebug --stacktrace)",
+      "Bash(./gradlew:*)"
     ],
     "deny": [],
     "ask": []
