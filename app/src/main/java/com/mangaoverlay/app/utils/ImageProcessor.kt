@@ -15,44 +15,109 @@ object ImageProcessor {
 
     private const val TAG = "ImageProcessor"
     private const val DEFAULT_QUALITY = 85
-    private const val MIN_QUALITY = 50
+    private const val MIN_QUALITY = 40
+    private const val MAX_DIMENSION = 1920 // Max width or height in pixels
 
     /**
-     * Compress bitmap to ensure it's under the specified max size
+     * Optimized compression targeting a specific size with two-pass approach
      * @param bitmap The bitmap to compress
-     * @param maxSizeBytes Maximum size in bytes (default: 2MB)
+     * @param targetSizeBytes Target size in bytes (default: 75KB)
+     * @param maxSizeBytes Maximum size in bytes (default: 100KB)
+     * @return Compressed bitmap
+     */
+    fun compressBitmapOptimized(
+        bitmap: Bitmap,
+        targetSizeBytes: Int = ApiConfig.TARGET_IMAGE_SIZE_BYTES,
+        maxSizeBytes: Int = ApiConfig.MAX_IMAGE_SIZE_BYTES
+    ): Bitmap {
+        Log.d(TAG, "Starting compression: ${bitmap.width}x${bitmap.height}")
+
+        // Step 1: Pre-scale if image is too large (reduces memory and improves compression)
+        var workingBitmap = prescaleIfNeeded(bitmap)
+        Log.d(TAG, "After prescale: ${workingBitmap.width}x${workingBitmap.height}")
+
+        // Step 2: Find optimal quality for target size
+        var quality = findOptimalQuality(workingBitmap, targetSizeBytes, maxSizeBytes)
+        var outputStream = ByteArrayOutputStream()
+        workingBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+
+        // Step 3: If still too large, progressively scale down
+        var scaleFactor = 1.0
+        while (outputStream.size() > maxSizeBytes && scaleFactor > 0.3) {
+            outputStream.reset()
+            scaleFactor -= 0.1
+            val newWidth = (workingBitmap.width * scaleFactor).toInt().coerceAtLeast(100)
+            val newHeight = (workingBitmap.height * scaleFactor).toInt().coerceAtLeast(100)
+
+            val scaledBitmap = Bitmap.createScaledBitmap(workingBitmap, newWidth, newHeight, true)
+            if (scaledBitmap != workingBitmap && scaledBitmap != bitmap) {
+                workingBitmap.recycle()
+            }
+            workingBitmap = scaledBitmap
+
+            // Re-find optimal quality for new size
+            quality = findOptimalQuality(workingBitmap, targetSizeBytes, maxSizeBytes)
+            workingBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+            Log.d(TAG, "Scaled to ${newWidth}x${newHeight}, quality $quality, size: ${outputStream.size()} bytes")
+        }
+
+        Log.d(TAG, "Final: ${workingBitmap.width}x${workingBitmap.height}, quality $quality, size: ${outputStream.size()} bytes")
+        return workingBitmap
+    }
+
+    /**
+     * Pre-scale bitmap if dimensions exceed maximum
+     */
+    private fun prescaleIfNeeded(bitmap: Bitmap): Bitmap {
+        val maxDim = maxOf(bitmap.width, bitmap.height)
+        if (maxDim <= MAX_DIMENSION) {
+            return bitmap
+        }
+
+        val scale = MAX_DIMENSION.toFloat() / maxDim
+        val newWidth = (bitmap.width * scale).toInt()
+        val newHeight = (bitmap.height * scale).toInt()
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+    }
+
+    /**
+     * Find optimal quality setting to get close to target size
+     */
+    private fun findOptimalQuality(bitmap: Bitmap, targetSize: Int, maxSize: Int): Int {
+        var low = MIN_QUALITY
+        var high = DEFAULT_QUALITY
+        var bestQuality = MIN_QUALITY
+
+        // Binary search for optimal quality
+        while (low <= high) {
+            val mid = (low + high) / 2
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, mid, outputStream)
+            val size = outputStream.size()
+
+            if (size <= maxSize) {
+                bestQuality = mid
+                if (size >= targetSize) {
+                    return mid // Found quality that gives size in target range
+                }
+                low = mid + 1 // Try higher quality
+            } else {
+                high = mid - 1 // Size too large, reduce quality
+            }
+        }
+
+        return bestQuality
+    }
+
+    /**
+     * Compress bitmap to ensure it's under the specified max size (legacy method)
+     * @param bitmap The bitmap to compress
+     * @param maxSizeBytes Maximum size in bytes (default: 100KB)
      * @return Compressed bitmap or original if already under size
      */
+    @Deprecated("Use compressBitmapOptimized for better results", ReplaceWith("compressBitmapOptimized(bitmap, maxSizeBytes * 3/4, maxSizeBytes)"))
     fun compressBitmap(bitmap: Bitmap, maxSizeBytes: Int = ApiConfig.MAX_IMAGE_SIZE_BYTES): Bitmap {
-        val outputStream = ByteArrayOutputStream()
-        var quality = DEFAULT_QUALITY
-
-        // Try compressing with decreasing quality until under size limit
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
-
-        while (outputStream.size() > maxSizeBytes && quality >= MIN_QUALITY) {
-            outputStream.reset()
-            quality -= 10
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
-            Log.d(TAG, "Compressing with quality $quality, size: ${outputStream.size()} bytes")
-        }
-
-        // If still too large, scale down the bitmap
-        if (outputStream.size() > maxSizeBytes) {
-            Log.d(TAG, "Image still too large, scaling down")
-            val scaleFactor = kotlin.math.sqrt(maxSizeBytes.toDouble() / outputStream.size())
-            val scaledWidth = (bitmap.width * scaleFactor).toInt()
-            val scaledHeight = (bitmap.height * scaleFactor).toInt()
-            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, scaledWidth, scaledHeight, true)
-
-            outputStream.reset()
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, DEFAULT_QUALITY, outputStream)
-            Log.d(TAG, "Scaled to ${scaledWidth}x${scaledHeight}, final size: ${outputStream.size()} bytes")
-
-            return scaledBitmap
-        }
-
-        return bitmap
+        return compressBitmapOptimized(bitmap, maxSizeBytes * 3 / 4, maxSizeBytes)
     }
 
     /**
@@ -76,11 +141,12 @@ object ImageProcessor {
     /**
      * Compress and convert bitmap to base64
      * This is a convenience method that combines compression and base64 encoding
+     * Uses optimized compression to target 75KB with max 100KB
      * @param bitmap The bitmap to process
      * @return Base64 encoded string of compressed bitmap
      */
     fun compressAndEncode(bitmap: Bitmap): String {
-        val compressed = compressBitmap(bitmap)
+        val compressed = compressBitmapOptimized(bitmap)
         return bitmapToBase64(compressed)
     }
 

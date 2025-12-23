@@ -27,7 +27,7 @@ class ScreenCaptureManager(private val context: Context) {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
 
-    // Store permission data for recreating MediaProjection after each capture
+    // Store permission data (currently unused, kept for potential future use)
     private var storedResultCode: Int? = null
     private var storedData: Intent? = null
 
@@ -63,59 +63,56 @@ class ScreenCaptureManager(private val context: Context) {
      * @param callback Callback with captured bitmap or error
      */
     fun captureScreen(callback: (Bitmap?) -> Unit) {
-        // Recreate MediaProjection if it was stopped after previous capture
-        if (mediaProjection == null && storedResultCode != null && storedData != null) {
-            mediaProjection = mediaProjectionManager.getMediaProjection(storedResultCode!!, storedData!!)
-            mediaProjection?.registerCallback(projectionCallback, handler)
-        }
-
         if (mediaProjection == null) {
             callback(null)
             return
         }
 
-        // Get screen dimensions
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
+        // Create VirtualDisplay only if it doesn't exist yet
+        if (virtualDisplay == null) {
+            // Get screen dimensions
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(metrics)
+            val width = metrics.widthPixels
+            val height = metrics.heightPixels
+            val density = metrics.densityDpi
 
-        // Create ImageReader for capturing the screen
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            // Create ImageReader for capturing the screen
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
 
-        // Create VirtualDisplay for screen mirroring
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "ScreenCapture",
-            width,
-            height,
-            density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null,
-            handler
-        )
+            // Create VirtualDisplay for screen mirroring (only once per MediaProjection)
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "ScreenCapture",
+                width,
+                height,
+                density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null,
+                handler
+            )
+        }
 
         // Wait a bit for the display to be ready, then capture
         handler.postDelayed({
             try {
                 val image = imageReader?.acquireLatestImage()
-                val bitmap = image?.let { convertImageToBitmap(it, width, height) }
-                image?.close()
-                callback(bitmap)
+                if (image != null) {
+                    val metrics = DisplayMetrics()
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay.getRealMetrics(metrics)
+                    val bitmap = convertImageToBitmap(image, metrics.widthPixels, metrics.heightPixels)
+                    image.close()
+                    callback(bitmap)
+                } else {
+                    callback(null)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 callback(null)
-            } finally {
-                cleanup()
-                // Stop and release MediaProjection after each capture
-                // This is necessary because Android doesn't allow creating multiple
-                // VirtualDisplays from the same MediaProjection instance
-                mediaProjection?.unregisterCallback(projectionCallback)
-                mediaProjection?.stop()
-                mediaProjection = null
             }
+            // Don't cleanup VirtualDisplay - keep it alive for next capture
         }, 100)
     }
 
