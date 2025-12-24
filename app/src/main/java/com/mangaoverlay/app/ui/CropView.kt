@@ -63,6 +63,8 @@ class CropView @JvmOverloads constructor(
     private val handleSize = 80f
     private val minCropSize = 100f
 
+    private var showCropUI = true
+
     enum class Handle {
         TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT,
         TOP, BOTTOM, LEFT, RIGHT, CENTER
@@ -77,6 +79,15 @@ class CropView @JvmOverloads constructor(
             calculateInitialCropRect()
             invalidate()
         }
+    }
+
+    /**
+     * Show or hide the crop UI (grid lines, handles, overlay)
+     * Set to false to display the image without crop controls
+     */
+    fun setShowCropUI(show: Boolean) {
+        showCropUI = show
+        invalidate()
     }
 
     /**
@@ -119,50 +130,53 @@ class CropView @JvmOverloads constructor(
             // Draw the bitmap
             canvas.drawBitmap(bmp, null, bitmapRect, null)
 
-            // Draw dark overlay
-            val layerId = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
-            canvas.drawRect(cropRect, clearPaint)
-            canvas.restoreToCount(layerId)
+            // Only draw crop UI if enabled
+            if (showCropUI) {
+                // Draw dark overlay
+                val layerId = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
+                canvas.drawRect(cropRect, clearPaint)
+                canvas.restoreToCount(layerId)
 
-            // Draw crop rectangle border
-            canvas.drawRect(cropRect, borderPaint)
+                // Draw crop rectangle border
+                canvas.drawRect(cropRect, borderPaint)
 
-            // Draw grid lines (rule of thirds)
-            val gridWidth = cropRect.width() / 3
-            val gridHeight = cropRect.height() / 3
+                // Draw grid lines (rule of thirds)
+                val gridWidth = cropRect.width() / 3
+                val gridHeight = cropRect.height() / 3
 
-            // Vertical lines
-            canvas.drawLine(
-                cropRect.left + gridWidth, cropRect.top,
-                cropRect.left + gridWidth, cropRect.bottom, gridPaint
-            )
-            canvas.drawLine(
-                cropRect.left + gridWidth * 2, cropRect.top,
-                cropRect.left + gridWidth * 2, cropRect.bottom, gridPaint
-            )
+                // Vertical lines
+                canvas.drawLine(
+                    cropRect.left + gridWidth, cropRect.top,
+                    cropRect.left + gridWidth, cropRect.bottom, gridPaint
+                )
+                canvas.drawLine(
+                    cropRect.left + gridWidth * 2, cropRect.top,
+                    cropRect.left + gridWidth * 2, cropRect.bottom, gridPaint
+                )
 
-            // Horizontal lines
-            canvas.drawLine(
-                cropRect.left, cropRect.top + gridHeight,
-                cropRect.right, cropRect.top + gridHeight, gridPaint
-            )
-            canvas.drawLine(
-                cropRect.left, cropRect.top + gridHeight * 2,
-                cropRect.right, cropRect.top + gridHeight * 2, gridPaint
-            )
+                // Horizontal lines
+                canvas.drawLine(
+                    cropRect.left, cropRect.top + gridHeight,
+                    cropRect.right, cropRect.top + gridHeight, gridPaint
+                )
+                canvas.drawLine(
+                    cropRect.left, cropRect.top + gridHeight * 2,
+                    cropRect.right, cropRect.top + gridHeight * 2, gridPaint
+                )
 
-            // Draw corner handles
-            drawHandle(canvas, cropRect.left, cropRect.top)
-            drawHandle(canvas, cropRect.right, cropRect.top)
-            drawHandle(canvas, cropRect.left, cropRect.bottom)
-            drawHandle(canvas, cropRect.right, cropRect.bottom)
+                // Draw corner handles
+                drawHandle(canvas, cropRect.left, cropRect.top)
+                drawHandle(canvas, cropRect.right, cropRect.top)
+                drawHandle(canvas, cropRect.left, cropRect.bottom)
+                drawHandle(canvas, cropRect.right, cropRect.bottom)
 
-            // Draw edge handles
-            drawHandle(canvas, (cropRect.left + cropRect.right) / 2, cropRect.top)
-            drawHandle(canvas, (cropRect.left + cropRect.right) / 2, cropRect.bottom)
-            drawHandle(canvas, cropRect.left, (cropRect.top + cropRect.bottom) / 2)
-            drawHandle(canvas, cropRect.right, (cropRect.top + cropRect.bottom) / 2)
+                // Draw edge handles
+                drawHandle(canvas, (cropRect.left + cropRect.right) / 2, cropRect.top)
+                drawHandle(canvas, (cropRect.left + cropRect.right) / 2, cropRect.bottom)
+                drawHandle(canvas, cropRect.left, (cropRect.top + cropRect.bottom) / 2)
+                drawHandle(canvas, cropRect.right, (cropRect.top + cropRect.bottom) / 2)
+            }
         }
     }
 
@@ -171,6 +185,11 @@ class CropView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Don't handle touch events if crop UI is hidden
+        if (!showCropUI) {
+            return super.onTouchEvent(event)
+        }
+
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 activeHandle = getHandleAt(event.x, event.y)

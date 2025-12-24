@@ -124,19 +124,28 @@ class CropActivity : AppCompatActivity() {
                 Log.d(TAG, "Confidence: ${result.confidence}")
                 Log.d(TAG, "========================")
 
-                // Show success message
-                Toast.makeText(
-                    this@CropActivity,
-                    "Translation received! Check logcat for details.\n" +
-                            "Japanese: ${result.japanese.take(30)}...\n" +
-                            "English: ${result.english.take(30)}...",
-                    Toast.LENGTH_LONG
-                ).show()
+                // Display the edited image with translation
+                result.editedImage?.let { editedBitmap ->
+                    Log.d(TAG, "Displaying edited image: ${editedBitmap.width}x${editedBitmap.height}")
+                    binding.cropView.setBitmap(editedBitmap)
+                    binding.cropView.setShowCropUI(false)
+                    binding.instructionsText.text = "Translation complete! Tap 'Done' to close."
+                    binding.confirmButton.text = "Done"
+                    binding.confirmButton.setOnClickListener {
+                        deleteScreenshotFile()
+                        finish()
+                    }
+                } ?: run {
+                    // No edited image, just show text
+                    Toast.makeText(
+                        this@CropActivity,
+                        "Translation complete!\nJapanese: ${result.japanese.take(30)}...\nEnglish: ${result.english.take(30)}...",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
 
-                // Clean up and finish
+                // Clean up cropped bitmap
                 croppedBitmap.recycle()
-                deleteScreenshotFile()
-                finish()
 
             } catch (e: Exception) {
                 Log.e(TAG, "Translation error", e)
