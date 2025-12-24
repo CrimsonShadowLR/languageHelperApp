@@ -1,4 +1,4 @@
-package com.example.languageapp.ui.theme
+package com.mangaoverlay.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

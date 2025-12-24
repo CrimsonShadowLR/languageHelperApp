@@ -1,6 +1,5 @@
 package com.mangaoverlay.app
 
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
@@ -161,14 +160,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Check if the overlay service is currently running
      */
-    @Suppress("DEPRECATION")
     private fun isOverlayServiceRunning(): Boolean {
-        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
-            if (OverlayService::class.java.name == service.service.className) {
-                return true
-            }
-        }
-        return false
+        return OverlayService.isServiceRunning()
     }
 }

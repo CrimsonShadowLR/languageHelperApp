@@ -12,7 +12,7 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import java.nio.ByteBuffer
@@ -27,15 +27,12 @@ class ScreenCaptureManager(private val context: Context) {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
 
-    // Store permission data (currently unused, kept for potential future use)
-    private var storedResultCode: Int? = null
-    private var storedData: Intent? = null
-
     private val mediaProjectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val handler = Handler(Looper.getMainLooper())
+    private val handlerThread = HandlerThread("ScreenCaptureThread").apply { start() }
+    private val handler = Handler(handlerThread.looper)
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -48,10 +45,6 @@ class ScreenCaptureManager(private val context: Context) {
      * Initialize MediaProjection with permission data
      */
     fun initializeProjection(resultCode: Int, data: Intent) {
-        // Store permission data for recreating MediaProjection after each capture
-        storedResultCode = resultCode
-        storedData = data
-
         // Create initial MediaProjection
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
         // Register callback as required by Android API
@@ -160,6 +153,7 @@ class ScreenCaptureManager(private val context: Context) {
         mediaProjection?.unregisterCallback(projectionCallback)
         mediaProjection?.stop()
         mediaProjection = null
+        handlerThread.quitSafely()
     }
 
     /**

@@ -46,10 +46,16 @@ class OverlayService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "overlay_service_channel"
+
+        @Volatile
+        private var isRunning = false
+
+        fun isServiceRunning(): Boolean = isRunning
     }
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         createNotificationChannel()
         setupOverlayView()
     }
@@ -92,6 +98,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         // Stop screen capture and clean up
         screenCaptureManager?.stop()
         screenCaptureManager = null

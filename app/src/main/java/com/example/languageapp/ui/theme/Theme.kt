@@ -1,4 +1,4 @@
-package com.example.languageapp.ui.theme
+package com.mangaoverlay.app.ui.theme
 
 import android.app.Activity
 import android.os.Build
