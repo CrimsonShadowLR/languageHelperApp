@@ -338,7 +338,7 @@ class CropActivity : AppCompatActivity() {
                 }
                 
                 if (!success) {
-                    // Close the MediaStore entry since we couldn't write to it
+                    // Delete the MediaStore entry since we couldn't write to it
                     Log.e(TAG, "Failed to compress image to MediaStore")
                     contentResolver.delete(savedUri, null, null)
                 }
@@ -432,9 +432,17 @@ class CropActivity : AppCompatActivity() {
                 // Re-enable save button so user can retry
                 binding.cancelButton.isEnabled = true
                 
+                val message = if (permissionDeniedPermanently) {
+                    // User selected "Don't ask again" - direct them to app settings
+                    getString(R.string.permission_denied_with_retry)
+                } else {
+                    // User denied once - they can try again
+                    getString(R.string.permission_denied_with_retry)
+                }
+                
                 Toast.makeText(
                     this,
-                    getString(R.string.permission_denied_with_retry),
+                    message,
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -448,6 +456,7 @@ class CropActivity : AppCompatActivity() {
         saveJob?.cancel()
         hideLoading()
         // Ensure any ongoing save operation is cancelled before recycling bitmaps
+        // Note: Cancellation is cooperative, so add bitmap validity checks in save operation
         capturedBitmap?.recycle()
         capturedBitmap = null
         translatedBitmap?.recycle()
