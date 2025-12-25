@@ -89,6 +89,16 @@ class ScreenCaptureManager(private val context: Context) {
                 displayWidth = width
                 displayHeight = height
                 
+                // Close any existing ImageReader before creating a new one to avoid leaks
+                imageReader?.let {
+                    try {
+                        it.close()
+                        android.util.Log.d("ScreenCaptureManager", "Closed previous ImageReader")
+                    } catch (e: Exception) {
+                        android.util.Log.w("ScreenCaptureManager", "Error closing previous ImageReader", e)
+                    }
+                }
+                
                 // Create ImageReader for capturing the screen
                 imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
 
@@ -105,6 +115,9 @@ class ScreenCaptureManager(private val context: Context) {
                 )
             }
 
+            // Clear any existing listener to prevent multiple listeners
+            imageReader?.setOnImageAvailableListener(null, null)
+            
             // Flag to prevent duplicate callback invocations
             var callbackInvoked = false
             

@@ -236,15 +236,19 @@ class OverlayService : Service() {
                     overlayView?.visibility = View.VISIBLE
 
                     if (bitmap != null) {
-                        // Save the bitmap to a temporary file
-                        val screenshotFile = saveBitmapToFile(bitmap)
-                        if (screenshotFile != null) {
-                            // Launch CropActivity
-                            launchCropActivity(screenshotFile.absolutePath)
-                        } else {
-                            Toast.makeText(this, "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                        try {
+                            // Save the bitmap to a temporary file
+                            val screenshotFile = saveBitmapToFile(bitmap)
+                            if (screenshotFile != null) {
+                                // Launch CropActivity
+                                launchCropActivity(screenshotFile.absolutePath)
+                            } else {
+                                Toast.makeText(this, "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                            }
+                        } finally {
+                            // Always recycle bitmap to avoid memory leaks
+                            bitmap.recycle()
                         }
-                        bitmap.recycle()
                     } else {
                         Toast.makeText(this, "Failed to capture screen. Try restarting the overlay.", Toast.LENGTH_LONG).show()
                     }
