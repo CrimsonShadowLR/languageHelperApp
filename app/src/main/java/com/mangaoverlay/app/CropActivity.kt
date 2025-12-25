@@ -38,6 +38,7 @@ class CropActivity : AppCompatActivity() {
     private val translationClient = TranslationClient()
     private var loadingDialog: LoadingDialog? = null
     private var translationJob: Job? = null
+    private var saveJob: Job? = null
 
     companion object {
         private const val TAG = "CropActivity"
@@ -177,12 +178,13 @@ class CropActivity : AppCompatActivity() {
                             
                             // Disable the save button while the image is being saved
                             binding.cancelButton.isEnabled = false
-                            lifecycleScope.launch {
+                            saveJob = lifecycleScope.launch {
                                 try {
                                     trySaveImage(bitmap)
                                 } finally {
                                     // Re-enable the button after the save attempt completes
                                     binding.cancelButton.isEnabled = true
+                                    saveJob = null
                                 }
                             }
                         }
@@ -235,7 +237,7 @@ class CropActivity : AppCompatActivity() {
     private suspend fun trySaveImage(bitmap: Bitmap) {
         try {
             val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                saveImageToGallery(bitmap)
+                saveImageToDownloads(bitmap)
             }
             if (saved) {
                 Toast.makeText(
@@ -280,7 +282,7 @@ class CropActivity : AppCompatActivity() {
      * @throws IOException if storage is unavailable or file operations fail
      */
     @Suppress("DEPRECATION")
-    private fun saveImageToGallery(bitmap: Bitmap): Boolean {
+    private fun saveImageToDownloads(bitmap: Bitmap): Boolean {
         val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         } else {
@@ -367,11 +369,12 @@ class CropActivity : AppCompatActivity() {
                 val bitmap = translatedBitmap
                 if (bitmap != null && !bitmap.isRecycled) {
                     binding.cancelButton.isEnabled = false
-                    lifecycleScope.launch {
+                    saveJob = lifecycleScope.launch {
                         try {
                             trySaveImage(bitmap)
                         } finally {
                             binding.cancelButton.isEnabled = true
+                            saveJob = null
                         }
                     }
                 } else {
@@ -396,6 +399,7 @@ class CropActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         translationJob?.cancel()
+        saveJob?.cancel()
         hideLoading()
         capturedBitmap?.recycle()
         capturedBitmap = null
