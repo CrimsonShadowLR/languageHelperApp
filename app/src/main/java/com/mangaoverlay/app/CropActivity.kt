@@ -23,7 +23,6 @@ import com.mangaoverlay.app.utils.TranslationError
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -145,6 +144,7 @@ class CropActivity : AppCompatActivity() {
                 // Display the edited image with translation
                 result.editedImage?.let { editedBitmap ->
                     Log.d(TAG, "Displaying edited image: ${editedBitmap.width}x${editedBitmap.height}")
+                    translatedBitmap?.recycle()
                     translatedBitmap = editedBitmap
                     binding.cropView.setBitmap(editedBitmap)
                     binding.cropView.setShowCropUI(false)
@@ -254,9 +254,10 @@ class CropActivity : AppCompatActivity() {
             ).show()
             Log.e(TAG, "Failed to save image due to I/O error", e)
         } catch (e: Exception) {
+            val errorMsg = e.message ?: getString(R.string.unknown_error)
             Toast.makeText(
                 this,
-                "Failed to save image: ${e.message ?: "Unknown error"}",
+                getString(R.string.failed_to_save_image_error, errorMsg),
                 Toast.LENGTH_LONG
             ).show()
             Log.e(TAG, "Failed to save image due to unexpected error", e)
@@ -284,19 +285,24 @@ class CropActivity : AppCompatActivity() {
                 uri?.let {
                     val success = contentResolver.openOutputStream(it)?.use { outputStream ->
                         bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
-                    } ?: false
+                    } ?: run {
+                        Log.e(TAG, "Failed to open output stream for URI: $it")
+                        false
+                    }
                     if (success) {
                         Log.d(TAG, "Image saved to Downloads: $fileName")
                     }
                     success
-                } ?: false
+                } ?: run {
+                    Log.e(TAG, "Failed to insert image into MediaStore")
+                    false
+                }
             } else {
                 // Legacy storage for Android 9 and below
                 // Check if external storage is available and mounted
                 val storageState = Environment.getExternalStorageState()
                 if (storageState != Environment.MEDIA_MOUNTED) {
-                    Log.e(TAG, "External storage not available. State: $storageState")
-                    return false
+                    throw IOException("External storage not available. State: $storageState")
                 }
                 
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
