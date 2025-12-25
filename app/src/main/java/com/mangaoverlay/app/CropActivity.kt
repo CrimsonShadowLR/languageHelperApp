@@ -22,6 +22,8 @@ import com.mangaoverlay.app.ui.LoadingDialog
 import com.mangaoverlay.app.utils.TranslationError
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -256,7 +258,17 @@ class CropActivity : AppCompatActivity() {
      */
     private suspend fun trySaveImage(bitmap: Bitmap) {
         try {
-            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            // Check bitmap validity before starting I/O operation to prevent race condition
+            if (bitmap.isRecycled) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.image_no_longer_available),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            
+            val saved = withContext(Dispatchers.IO) {
                 saveImageToDownloads(bitmap)
             }
             if (saved) {
@@ -381,7 +393,7 @@ class CropActivity : AppCompatActivity() {
 
             if (success) {
                 // Trigger media scan to make the file immediately visible in gallery and file managers
-                android.media.MediaScannerConnection.scanFile(
+                MediaScannerConnection.scanFile(
                     this,
                     arrayOf(imageFile.absolutePath),
                     arrayOf("image/jpeg"),
@@ -423,26 +435,12 @@ class CropActivity : AppCompatActivity() {
                     ).show()
                 }
             } else {
-                // Permission denied
-                val permissionDeniedPermanently = !ActivityCompat.shouldShowRequestPermissionRationale(
-                    this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                )
-                
-                // Re-enable save button so user can retry
+                // Permission denied - re-enable save button so user can retry
                 binding.cancelButton.isEnabled = true
-                
-                val message = if (permissionDeniedPermanently) {
-                    // User selected "Don't ask again" - direct them to app settings
-                    getString(R.string.permission_denied_with_retry)
-                } else {
-                    // User denied once - they can try again
-                    getString(R.string.permission_denied_with_retry)
-                }
                 
                 Toast.makeText(
                     this,
-                    message,
+                    getString(R.string.permission_denied_with_retry),
                     Toast.LENGTH_LONG
                 ).show()
             }
