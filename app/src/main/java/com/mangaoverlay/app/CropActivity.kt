@@ -12,7 +12,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -26,9 +25,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Activity for cropping captured screenshots
@@ -277,12 +273,12 @@ class CropActivity : AppCompatActivity() {
      * Uses MediaStore API for Android 10+ and legacy file storage for older versions
      * @throws IOException if storage is unavailable or file operations fail
      */
+    @Suppress("DEPRECATION")
     private fun saveImageToGallery(bitmap: Bitmap): Boolean {
         val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         } else {
-            @Suppress("DEPRECATION")
-            java.text.SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
         }
         val fileName = "manga_translated_$timestamp.jpg"
 
@@ -316,8 +312,16 @@ class CropActivity : AppCompatActivity() {
             // Legacy storage for Android 9 and below
             // Check if external storage is available and mounted
             val storageState = Environment.getExternalStorageState()
-            if (storageState != Environment.MEDIA_MOUNTED) {
-                throw IOException("External storage not available. State: $storageState")
+            when (storageState) {
+                Environment.MEDIA_MOUNTED_READ_ONLY -> {
+                    throw IOException(getString(R.string.error_storage_read_only))
+                }
+                Environment.MEDIA_MOUNTED -> {
+                    // Storage is available and writable, continue
+                }
+                else -> {
+                    throw IOException("External storage not available. State: $storageState")
+                }
             }
             
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
