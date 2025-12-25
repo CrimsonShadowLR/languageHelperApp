@@ -1,6 +1,8 @@
 package com.mangaoverlay.app
 
+import android.Manifest
 import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaScannerConnection
@@ -11,6 +13,8 @@ import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.mangaoverlay.app.api.TranslationClient
 import com.mangaoverlay.app.databinding.ActivityCropBinding
@@ -40,6 +44,7 @@ class CropActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "CropActivity"
         const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
+        private const val REQUEST_WRITE_STORAGE = 112
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -153,6 +158,23 @@ class CropActivity : AppCompatActivity() {
                     binding.cancelButton.text = getString(R.string.save)
                     binding.cancelButton.setOnClickListener {
                         translatedBitmap?.let { bitmap ->
+                            // Check for WRITE_EXTERNAL_STORAGE permission on Android 9 and below
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                if (ContextCompat.checkSelfPermission(
+                                        this@CropActivity,
+                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    // Request permission
+                                    ActivityCompat.requestPermissions(
+                                        this@CropActivity,
+                                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                        REQUEST_WRITE_STORAGE
+                                    )
+                                    return@setOnClickListener
+                                }
+                            }
+                            
                             try {
                                 val saved = saveImageToGallery(bitmap)
                                 if (saved) {
@@ -175,6 +197,13 @@ class CropActivity : AppCompatActivity() {
                                     Toast.LENGTH_SHORT
                                 ).show()
                                 Log.e(TAG, "Failed to save image due to missing storage permission", e)
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    this@CropActivity,
+                                    getString(R.string.failed_to_save_image),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                Log.e(TAG, "Failed to save image due to unexpected error", e)
                             }
                         }
                     }
@@ -224,12 +253,6 @@ class CropActivity : AppCompatActivity() {
      * Uses MediaStore API for Android 10+ and legacy file storage for older versions
      */
     private fun saveImageToGallery(bitmap: Bitmap): Boolean {
-        val storageMethod = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            "MediaStore"
-        } else {
-            "legacy storage"
-        }
-
         return try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val fileName = "manga_translated_$timestamp.jpg"
@@ -244,11 +267,13 @@ class CropActivity : AppCompatActivity() {
 
                 val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 uri?.let {
-                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                    val success = contentResolver.openOutputStream(it)?.use { outputStream ->
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                    } ?: false
+                    if (success) {
+                        Log.d(TAG, "Image saved to Downloads: $fileName")
                     }
-                    Log.d(TAG, "Image saved to Downloads: $fileName")
-                    true
+                    success
                 } ?: false
             } else {
                 // Legacy storage for Android 9 and below
@@ -258,24 +283,73 @@ class CropActivity : AppCompatActivity() {
                 }
 
                 val imageFile = File(downloadsDir, fileName)
-                FileOutputStream(imageFile).use { outputStream ->
+                val success = FileOutputStream(imageFile).use { outputStream ->
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
                 }
 
-                // Notify media scanner about the new file using MediaScannerConnection
-                MediaScannerConnection.scanFile(
-                    this,
-                    arrayOf(imageFile.absolutePath),
-                    arrayOf("image/jpeg"),
-                    null
-                )
-
-                Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
-                true
+                if (success) {
+                    // Notify media scanner about the new file using MediaScannerConnection
+                    MediaScannerConnection.scanFile(
+                        this,
+                        arrayOf(imageFile.absolutePath),
+                        arrayOf("image/jpeg"),
+                        null
+                    )
+                    Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
+                }
+                success
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save image using $storageMethod", e)
+            val apiLevel = Build.VERSION.SDK_INT
+            val method = if (apiLevel >= Build.VERSION_CODES.Q) "MediaStore API" else "legacy file storage"
+            Log.e(TAG, "Failed to save image using $method (Android API $apiLevel)", e)
             false
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        if (requestCode == REQUEST_WRITE_STORAGE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, try saving again
+                translatedBitmap?.let { bitmap ->
+                    try {
+                        val saved = saveImageToGallery(bitmap)
+                        if (saved) {
+                            Toast.makeText(
+                                this,
+                                getString(R.string.image_saved_to_downloads),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            Toast.makeText(
+                                this,
+                                getString(R.string.failed_to_save_image),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    } catch (e: SecurityException) {
+                        Toast.makeText(
+                            this,
+                            getString(R.string.permission_denied_storage),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        Log.e(TAG, "Failed to save image due to missing storage permission", e)
+                    }
+                }
+            } else {
+                // Permission denied
+                Toast.makeText(
+                    this,
+                    getString(R.string.permission_denied_storage),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
