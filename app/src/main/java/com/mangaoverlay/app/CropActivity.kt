@@ -166,7 +166,8 @@ class CropActivity : AppCompatActivity() {
                                         Manifest.permission.WRITE_EXTERNAL_STORAGE
                                     ) != PackageManager.PERMISSION_GRANTED
                                 ) {
-                                    // Request permission - button will be re-enabled in callback
+                                    // Disable button before requesting permission to prevent multiple requests
+                                    binding.cancelButton.isEnabled = false
                                     ActivityCompat.requestPermissions(
                                         this@CropActivity,
                                         arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
@@ -386,7 +387,8 @@ class CropActivity : AppCompatActivity() {
                     ).show()
                 }
             } else {
-                // Permission denied - keep save button enabled so user can retry
+                // Permission denied - re-enable save button so user can retry
+                binding.cancelButton.isEnabled = true
                 Toast.makeText(
                     this,
                     getString(R.string.permission_denied_with_retry),
@@ -396,10 +398,20 @@ class CropActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Cancel and wait for save operation to complete before activity is destroyed
+        // This prevents race condition where bitmap is recycled while save is still in progress
+        saveJob?.let { job ->
+            lifecycleScope.launch {
+                job.cancelAndJoin()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         translationJob?.cancel()
-        saveJob?.cancel()
         hideLoading()
         capturedBitmap?.recycle()
         capturedBitmap = null
