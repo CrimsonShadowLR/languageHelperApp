@@ -334,8 +334,22 @@ class CropActivity : AppCompatActivity() {
             }
             
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir.exists() && !downloadsDir.mkdirs()) {
-                throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
+            if (!downloadsDir.exists()) {
+                try {
+                    if (!downloadsDir.mkdirs()) {
+                        throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
+                    }
+                } catch (se: SecurityException) {
+                    Log.e(
+                        TAG,
+                        "Failed to create downloads directory at: ${downloadsDir.absolutePath} due to security/permission issues",
+                        se
+                    )
+                    throw IOException(
+                        "Failed to create downloads directory at: ${downloadsDir.absolutePath} due to missing permissions or restricted access",
+                        se
+                    )
+                }
             }
 
             val imageFile = File(downloadsDir, fileName)
