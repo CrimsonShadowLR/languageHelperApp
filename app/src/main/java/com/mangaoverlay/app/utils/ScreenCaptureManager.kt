@@ -37,6 +37,7 @@ class ScreenCaptureManager(private val context: Context) {
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val handlerThread = HandlerThread("ScreenCaptureThread").apply { start() }
     private val handler = Handler(handlerThread.looper)
+    private val mainHandler = Handler(android.os.Looper.getMainLooper())
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -62,7 +63,8 @@ class ScreenCaptureManager(private val context: Context) {
     fun captureScreen(callback: (Bitmap?) -> Unit) {
         if (mediaProjection == null) {
             android.util.Log.e("ScreenCaptureManager", "MediaProjection is null")
-            callback(null)
+            // Post callback to main thread for UI operations
+            mainHandler.post { callback(null) }
             return
         }
 
@@ -115,6 +117,12 @@ class ScreenCaptureManager(private val context: Context) {
                 )
             }
 
+            // Drain any pending images from the buffer to prevent blocking
+            // acquireLatestImage() gets the latest and discards older ones
+            imageReader?.acquireLatestImage()?.use { oldImage ->
+                android.util.Log.d("ScreenCaptureManager", "Drained old image from buffer")
+            }
+            
             // Clear any existing listener to prevent multiple listeners
             imageReader?.setOnImageAvailableListener(null, null)
             
@@ -127,7 +135,8 @@ class ScreenCaptureManager(private val context: Context) {
                     callbackInvoked = true
                     android.util.Log.e("ScreenCaptureManager", "Timeout waiting for image")
                     imageReader?.setOnImageAvailableListener(null, null)
-                    callback(null)
+                    // Post callback to main thread for UI operations
+                    mainHandler.post { callback(null) }
                 }
             }
 
@@ -144,19 +153,22 @@ class ScreenCaptureManager(private val context: Context) {
                         if (image != null) {
                             android.util.Log.d("ScreenCaptureManager", "Image captured successfully")
                             val bitmap = convertImageToBitmap(image, displayWidth, displayHeight)
-                            
+
                             // Clear the listener after capturing
                             reader.setOnImageAvailableListener(null, null)
-                            callback(bitmap)
+                            // Post callback to main thread for UI operations
+                            mainHandler.post { callback(bitmap) }
                         } else {
                             android.util.Log.w("ScreenCaptureManager", "Image is null")
                             reader.setOnImageAvailableListener(null, null)
-                            callback(null)
+                            // Post callback to main thread for UI operations
+                            mainHandler.post { callback(null) }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("ScreenCaptureManager", "Error capturing image", e)
                         reader.setOnImageAvailableListener(null, null)
-                        callback(null)
+                        // Post callback to main thread for UI operations
+                        mainHandler.post { callback(null) }
                     } finally {
                         // Always close image to prevent resource leak
                         image?.close()
@@ -169,7 +181,8 @@ class ScreenCaptureManager(private val context: Context) {
 
         } catch (e: Exception) {
             android.util.Log.e("ScreenCaptureManager", "Error setting up screen capture", e)
-            callback(null)
+            // Post callback to main thread for UI operations
+            mainHandler.post { callback(null) }
         }
     }
 
