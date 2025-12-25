@@ -20,6 +20,19 @@
     <string name="cancel">Cancel</string>
     <string name="confirm">Confirm</string>
     <string name="crop_and_translate">Crop &amp; Translate</string>
+    <string name="save">Save</string>
+    <string name="done">Done</string>
+    <string name="translation_complete_instructions">Translation complete! Save or tap Done to close.</string>
+    <string name="image_saved_to_downloads">Image saved to Downloads</string>
+    <string name="failed_to_save_image">Failed to save image</string>
+    <string name="failed_to_save_image_error">Failed to save image: %1$s</string>
+    <string name="unknown_error">Unknown error</string>
+    <string name="error_storage_full">Storage full. Please free up space and try again.</string>
+    <string name="error_storage_read_only">Storage is read-only. Cannot save image.</string>
+    <string name="error_file_system">File system error. Unable to save image.</string>
+    <string name="image_no_longer_available">Image is no longer available to save.</string>
+    <string name="permission_denied_with_retry">Permission denied. You can grant storage access in Settings or try saving again.</string>
+    <string name="save_in_progress">Please wait until the image has been saved.</string>
 
     <!-- Loading dialog -->
     <string name="loading_analyzing_manga">Analyzing manga panel…</string>
