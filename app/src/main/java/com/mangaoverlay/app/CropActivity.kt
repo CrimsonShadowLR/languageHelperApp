@@ -44,7 +44,7 @@ class CropActivity : AppCompatActivity() {
         private const val TAG = "CropActivity"
         const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
         private const val REQUEST_WRITE_STORAGE = 112
-        private const val IMAGE_COMPRESSION_QUALITY = 95
+        private const val IMAGE_COMPRESSION_QUALITY = 95 // Percentage from 0 to 100 for Bitmap compression quality
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -398,21 +398,13 @@ class CropActivity : AppCompatActivity() {
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        // Cancel and wait for save operation to complete before activity is destroyed
-        // This prevents race condition where bitmap is recycled while save is still in progress
-        saveJob?.let { job ->
-            lifecycleScope.launch {
-                job.cancelAndJoin()
-            }
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         translationJob?.cancel()
+        // Cancel any ongoing save operation; do not launch new coroutine here
+        saveJob?.cancel()
         hideLoading()
+        // Ensure any ongoing save operation is cancelled before recycling bitmaps
         capturedBitmap?.recycle()
         capturedBitmap = null
         translatedBitmap?.recycle()
