@@ -20,6 +20,7 @@
     <string name="cancel">Cancel</string>
     <string name="confirm">Confirm</string>
     <string name="crop_and_translate">Crop &amp; Translate</string>
+    <string name="save">Save</string>
 
     <!-- Loading dialog -->
     <string name="loading_analyzing_manga">Analyzing manga panel…</string>

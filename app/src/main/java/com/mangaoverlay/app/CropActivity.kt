@@ -1,8 +1,12 @@
 package com.mangaoverlay.app
 
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +18,10 @@ import com.mangaoverlay.app.utils.TranslationError
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Activity for cropping captured screenshots
@@ -23,6 +31,7 @@ class CropActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCropBinding
     private var capturedBitmap: Bitmap? = null
+    private var translatedBitmap: Bitmap? = null
     private val translationClient = TranslationClient()
     private var loadingDialog: LoadingDialog? = null
     private var translationJob: Job? = null
@@ -127,13 +136,37 @@ class CropActivity : AppCompatActivity() {
                 // Display the edited image with translation
                 result.editedImage?.let { editedBitmap ->
                     Log.d(TAG, "Displaying edited image: ${editedBitmap.width}x${editedBitmap.height}")
+                    translatedBitmap = editedBitmap
                     binding.cropView.setBitmap(editedBitmap)
                     binding.cropView.setShowCropUI(false)
-                    binding.instructionsText.text = "Translation complete! Tap 'Done' to close."
+                    binding.instructionsText.text = "Translation complete! Save or close."
+
+                    // Update confirm button to "Done"
                     binding.confirmButton.text = "Done"
                     binding.confirmButton.setOnClickListener {
                         deleteScreenshotFile()
                         finish()
+                    }
+
+                    // Update cancel button to "Save"
+                    binding.cancelButton.text = getString(R.string.save)
+                    binding.cancelButton.setOnClickListener {
+                        translatedBitmap?.let { bitmap ->
+                            val saved = saveImageToGallery(bitmap)
+                            if (saved) {
+                                Toast.makeText(
+                                    this@CropActivity,
+                                    "Image saved to Downloads",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    this@CropActivity,
+                                    "Failed to save image",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 } ?: run {
                     // No edited image, just show text
@@ -176,11 +209,66 @@ class CropActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Saves the translated image to the Downloads folder
+     * Uses MediaStore API for Android 10+ and legacy file storage for older versions
+     */
+    private fun saveImageToGallery(bitmap: Bitmap): Boolean {
+        return try {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val fileName = "manga_translated_$timestamp.jpg"
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Use MediaStore for Android 10+
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                    }
+                    Log.d(TAG, "Image saved to Downloads: $fileName")
+                    true
+                } ?: false
+            } else {
+                // Legacy storage for Android 9 and below
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloadsDir.exists()) {
+                    downloadsDir.mkdirs()
+                }
+
+                val imageFile = File(downloadsDir, fileName)
+                FileOutputStream(imageFile).use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                }
+
+                // Notify media scanner about the new file
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DATA, imageFile.absolutePath)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                }
+                contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+
+                Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save image", e)
+            false
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         translationJob?.cancel()
         hideLoading()
         capturedBitmap?.recycle()
         capturedBitmap = null
+        translatedBitmap?.recycle()
+        translatedBitmap = null
     }
 }
