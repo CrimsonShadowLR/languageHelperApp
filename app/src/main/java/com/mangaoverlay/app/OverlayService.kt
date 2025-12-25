@@ -217,16 +217,21 @@ class OverlayService : Service() {
         overlayView?.visibility = View.GONE
 
         // Capture the screen after a short delay to ensure button is hidden
-        // Also set a safety timeout to ensure button always reappears
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        handler.postDelayed({
-            // Safety: ensure button reappears after 5 seconds if something goes wrong
+        
+        // Safety timeout to ensure button always reappears
+        val safetyTimeout = Runnable {
             overlayView?.visibility = View.VISIBLE
-        }, 5000)
+            android.util.Log.w("OverlayService", "Safety timeout triggered - button restored")
+        }
+        handler.postDelayed(safetyTimeout, 5000)
         
         handler.postDelayed({
             try {
                 captureManager.captureScreen { bitmap ->
+                    // Cancel safety timeout since capture completed
+                    handler.removeCallbacks(safetyTimeout)
+                    
                     // ALWAYS show the button again, even on error
                     overlayView?.visibility = View.VISIBLE
 
@@ -245,7 +250,8 @@ class OverlayService : Service() {
                     }
                 }
             } catch (e: Exception) {
-                // Ensure button reappears even if exception occurs
+                // Cancel safety timeout and ensure button reappears
+                handler.removeCallbacks(safetyTimeout)
                 overlayView?.visibility = View.VISIBLE
                 Toast.makeText(this, "Capture error: ${e.message}", Toast.LENGTH_LONG).show()
                 android.util.Log.e("OverlayService", "Screen capture failed", e)

@@ -26,6 +26,10 @@ class ScreenCaptureManager(private val context: Context) {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+    
+    // Store display dimensions to handle screen changes
+    private var displayWidth: Int = 0
+    private var displayHeight: Int = 0
 
     private val mediaProjectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -63,7 +67,7 @@ class ScreenCaptureManager(private val context: Context) {
         }
 
         try {
-            // Get screen dimensions
+            // Get current screen dimensions
             val metrics = DisplayMetrics()
             @Suppress("DEPRECATION")
             windowManager.defaultDisplay.getRealMetrics(metrics)
@@ -71,14 +75,24 @@ class ScreenCaptureManager(private val context: Context) {
             val height = metrics.heightPixels
             val density = metrics.densityDpi
 
-            // Create VirtualDisplay only if it doesn't exist yet
-            if (virtualDisplay == null) {
+            // Create or recreate VirtualDisplay if dimensions changed
+            if (virtualDisplay == null || displayWidth != width || displayHeight != height) {
+                // Clean up old display if dimensions changed
+                if (virtualDisplay != null) {
+                    android.util.Log.d("ScreenCaptureManager", "Screen dimensions changed, recreating VirtualDisplay")
+                    cleanup()
+                }
+                
                 android.util.Log.d("ScreenCaptureManager", "Creating VirtualDisplay: ${width}x${height}")
+                
+                // Store dimensions
+                displayWidth = width
+                displayHeight = height
                 
                 // Create ImageReader for capturing the screen
                 imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
 
-                // Create VirtualDisplay for screen mirroring (only once per MediaProjection)
+                // Create VirtualDisplay for screen mirroring
                 virtualDisplay = mediaProjection?.createVirtualDisplay(
                     "ScreenCapture",
                     width,
@@ -91,38 +105,54 @@ class ScreenCaptureManager(private val context: Context) {
                 )
             }
 
-            // Set up one-time listener for image capture
-            imageReader?.setOnImageAvailableListener({ reader ->
-                try {
-                    val image = reader.acquireLatestImage()
-                    if (image != null) {
-                        android.util.Log.d("ScreenCaptureManager", "Image captured successfully")
-                        val bitmap = convertImageToBitmap(image, width, height)
-                        image.close()
-                        
-                        // Clear the listener after capturing
-                        reader.setOnImageAvailableListener(null, null)
-                        callback(bitmap)
-                    } else {
-                        android.util.Log.w("ScreenCaptureManager", "Image is null")
-                        reader.setOnImageAvailableListener(null, null)
-                        callback(null)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("ScreenCaptureManager", "Error capturing image", e)
-                    reader.setOnImageAvailableListener(null, null)
-                    callback(null)
-                }
-            }, handler)
-
-            // Add a timeout in case image never arrives
-            handler.postDelayed({
-                if (imageReader?.acquireLatestImage() == null) {
+            // Flag to prevent duplicate callback invocations
+            var callbackInvoked = false
+            
+            // Timeout runnable
+            val timeoutRunnable = Runnable {
+                if (!callbackInvoked) {
+                    callbackInvoked = true
                     android.util.Log.e("ScreenCaptureManager", "Timeout waiting for image")
                     imageReader?.setOnImageAvailableListener(null, null)
                     callback(null)
                 }
-            }, 3000) // 3 second timeout
+            }
+
+            // Set up one-time listener for image capture
+            imageReader?.setOnImageAvailableListener({ reader ->
+                if (!callbackInvoked) {
+                    callbackInvoked = true
+                    // Cancel timeout since we got an image
+                    handler.removeCallbacks(timeoutRunnable)
+                    
+                    var image: Image? = null
+                    try {
+                        image = reader.acquireLatestImage()
+                        if (image != null) {
+                            android.util.Log.d("ScreenCaptureManager", "Image captured successfully")
+                            val bitmap = convertImageToBitmap(image, displayWidth, displayHeight)
+                            
+                            // Clear the listener after capturing
+                            reader.setOnImageAvailableListener(null, null)
+                            callback(bitmap)
+                        } else {
+                            android.util.Log.w("ScreenCaptureManager", "Image is null")
+                            reader.setOnImageAvailableListener(null, null)
+                            callback(null)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ScreenCaptureManager", "Error capturing image", e)
+                        reader.setOnImageAvailableListener(null, null)
+                        callback(null)
+                    } finally {
+                        // Always close image to prevent resource leak
+                        image?.close()
+                    }
+                }
+            }, handler)
+
+            // Schedule timeout (3 seconds)
+            handler.postDelayed(timeoutRunnable, 3000)
 
         } catch (e: Exception) {
             android.util.Log.e("ScreenCaptureManager", "Error setting up screen capture", e)
