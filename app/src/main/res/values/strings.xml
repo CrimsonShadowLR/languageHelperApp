@@ -22,7 +22,7 @@
     <string name="crop_and_translate">Crop &amp; Translate</string>
     <string name="save">Save</string>
     <string name="done">Done</string>
-    <string name="translation_complete_instructions">Translation complete! Save or close.</string>
+    <string name="translation_complete_instructions">Translation complete! Save or tap Done to close.</string>
     <string name="image_saved_to_downloads">Image saved to Downloads</string>
     <string name="failed_to_save_image">Failed to save image</string>
     <string name="failed_to_save_image_error">Failed to save image: %1$s</string>
