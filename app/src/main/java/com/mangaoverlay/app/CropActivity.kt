@@ -5,7 +5,6 @@ import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -155,7 +154,7 @@ class CropActivity : AppCompatActivity() {
                         if (saveJob != null && saveJob?.isActive == true) {
                             Toast.makeText(
                                 this@CropActivity,
-                                "Please wait until the image has been saved.",
+                                getString(R.string.save_in_progress),
                                 Toast.LENGTH_SHORT
                             ).show()
                             return@setOnClickListener
@@ -316,15 +315,23 @@ class CropActivity : AppCompatActivity() {
             }
 
             val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                val success = contentResolver.openOutputStream(it)?.use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
+            uri?.let { savedUri ->
+                var success = false
+                contentResolver.openOutputStream(savedUri)?.use { outputStream ->
+                    success = bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
                 } ?: run {
-                    Log.e(TAG, "Failed to open output stream for URI: $it")
+                    Log.e(TAG, "Failed to open output stream for URI: $savedUri")
                     // Clean up the MediaStore entry since we couldn't write to it
-                    contentResolver.delete(it, null, null)
-                    false
+                    contentResolver.delete(savedUri, null, null)
+                    return@let false
                 }
+                
+                if (!success) {
+                    // Close the MediaStore entry since we couldn't write to it
+                    Log.e(TAG, "Failed to compress image to MediaStore")
+                    contentResolver.delete(savedUri, null, null)
+                }
+                
                 if (success) {
                     Log.d(TAG, "Image saved to Downloads: $fileName")
                 }

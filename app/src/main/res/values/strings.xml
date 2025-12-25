@@ -32,6 +32,7 @@
     <string name="error_file_system">File system error. Unable to save image.</string>
     <string name="image_no_longer_available">Image is no longer available to save.</string>
     <string name="permission_denied_with_retry">Permission denied. You can grant storage access in Settings or try saving again.</string>
+    <string name="save_in_progress">Please wait until the image has been saved.</string>
 
     <!-- Loading dialog -->
     <string name="loading_analyzing_manga">Analyzing manga panel…</string>
