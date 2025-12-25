@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -160,32 +161,32 @@ class CropActivity : AppCompatActivity() {
                     // Update cancel button to "Save"
                     binding.cancelButton.text = getString(R.string.save)
                     binding.cancelButton.setOnClickListener {
-                        // Disable the save button while the image is being saved
-                        binding.cancelButton.isEnabled = false
-                        try {
-                            translatedBitmap?.let { bitmap ->
-                                // Check for WRITE_EXTERNAL_STORAGE permission on Android 9 and below
-                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                                    if (ContextCompat.checkSelfPermission(
-                                            this@CropActivity,
-                                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                        ) != PackageManager.PERMISSION_GRANTED
-                                    ) {
-                                        // Request permission
-                                        ActivityCompat.requestPermissions(
-                                            this@CropActivity,
-                                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                                            REQUEST_WRITE_STORAGE
-                                        )
-                                        return@setOnClickListener
-                                    }
+                        translatedBitmap?.let { bitmap ->
+                            // Check for WRITE_EXTERNAL_STORAGE permission on Android 9 and below
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                if (ContextCompat.checkSelfPermission(
+                                        this@CropActivity,
+                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    // Request permission - button will be re-enabled in callback
+                                    ActivityCompat.requestPermissions(
+                                        this@CropActivity,
+                                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                        REQUEST_WRITE_STORAGE
+                                    )
+                                    return@setOnClickListener
                                 }
-                                
-                                trySaveImage(bitmap)
                             }
-                        } finally {
-                            // Re-enable the button after the save attempt completes
-                            binding.cancelButton.isEnabled = true
+                            
+                            // Disable the save button while the image is being saved
+                            binding.cancelButton.isEnabled = false
+                            try {
+                                trySaveImage(bitmap)
+                            } finally {
+                                // Re-enable the button after the save attempt completes
+                                binding.cancelButton.isEnabled = true
+                            }
                         }
                     }
                 } ?: run {
@@ -277,7 +278,12 @@ class CropActivity : AppCompatActivity() {
      * @throws IOException if storage is unavailable or file operations fail
      */
     private fun saveImageToGallery(bitmap: Bitmap): Boolean {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+        } else {
+            @Suppress("DEPRECATION")
+            java.text.SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        }
         val fileName = "manga_translated_$timestamp.jpg"
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -353,7 +359,12 @@ class CropActivity : AppCompatActivity() {
                 // Permission granted, try saving again
                 val bitmap = translatedBitmap
                 if (bitmap != null) {
-                    trySaveImage(bitmap)
+                    binding.cancelButton.isEnabled = false
+                    try {
+                        trySaveImage(bitmap)
+                    } finally {
+                        binding.cancelButton.isEnabled = true
+                    }
                 } else {
                     // Image reference was lost between permission request and callback
                     Toast.makeText(
