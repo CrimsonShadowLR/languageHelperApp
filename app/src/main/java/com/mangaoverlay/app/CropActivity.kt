@@ -151,6 +151,15 @@ class CropActivity : AppCompatActivity() {
                     // Update confirm button to "Done"
                     binding.confirmButton.text = getString(R.string.done)
                     binding.confirmButton.setOnClickListener {
+                        // Prevent finishing the activity while a save operation is in progress
+                        if (saveJob != null && saveJob?.isActive == true) {
+                            Toast.makeText(
+                                this@CropActivity,
+                                "Please wait until the image has been saved.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@setOnClickListener
+                        }
                         deleteScreenshotFile()
                         finish()
                     }
@@ -253,6 +262,13 @@ class CropActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
             }
+        } catch (e: SecurityException) {
+            Toast.makeText(
+                this,
+                getString(R.string.permission_denied_with_retry),
+                Toast.LENGTH_LONG
+            ).show()
+            Log.e(TAG, "Failed to save image due to security/permission error", e)
         } catch (e: IOException) {
             val messageResId = when {
                 e.message?.contains("ENOSPC", ignoreCase = true) == true -> R.string.error_storage_full
@@ -335,20 +351,8 @@ class CropActivity : AppCompatActivity() {
             
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             if (!downloadsDir.exists()) {
-                try {
-                    if (!downloadsDir.mkdirs()) {
-                        throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
-                    }
-                } catch (se: SecurityException) {
-                    Log.e(
-                        TAG,
-                        "Failed to create downloads directory at: ${downloadsDir.absolutePath} due to security/permission issues",
-                        se
-                    )
-                    throw IOException(
-                        "Failed to create downloads directory at: ${downloadsDir.absolutePath} due to missing permissions or restricted access",
-                        se
-                    )
+                if (!downloadsDir.mkdirs()) {
+                    throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
                 }
             }
 
@@ -358,13 +362,6 @@ class CropActivity : AppCompatActivity() {
             }
 
             if (success) {
-                // Notify media scanner about the new file using MediaScannerConnection
-                MediaScannerConnection.scanFile(
-                    this,
-                    arrayOf(imageFile.absolutePath),
-                    arrayOf("image/jpeg"),
-                    null
-                )
                 Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
             }
             success
