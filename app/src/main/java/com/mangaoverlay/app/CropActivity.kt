@@ -23,7 +23,9 @@ import com.mangaoverlay.app.utils.TranslationError
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,6 +47,7 @@ class CropActivity : AppCompatActivity() {
         private const val TAG = "CropActivity"
         const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
         private const val REQUEST_WRITE_STORAGE = 112
+        private const val IMAGE_COMPRESSION_QUALITY = 95
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -175,36 +178,7 @@ class CropActivity : AppCompatActivity() {
                                 }
                             }
                             
-                            try {
-                                val saved = saveImageToGallery(bitmap)
-                                if (saved) {
-                                    Toast.makeText(
-                                        this@CropActivity,
-                                        getString(R.string.image_saved_to_downloads),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                } else {
-                                    Toast.makeText(
-                                        this@CropActivity,
-                                        getString(R.string.failed_to_save_image),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            } catch (e: SecurityException) {
-                                Toast.makeText(
-                                    this@CropActivity,
-                                    getString(R.string.permission_denied_storage),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                Log.e(TAG, "Failed to save image due to missing storage permission", e)
-                            } catch (e: Exception) {
-                                Toast.makeText(
-                                    this@CropActivity,
-                                    getString(R.string.failed_to_save_image),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                Log.e(TAG, "Failed to save image due to unexpected error", e)
-                            }
+                            trySaveImage(bitmap)
                         }
                     }
                 } ?: run {
@@ -249,6 +223,47 @@ class CropActivity : AppCompatActivity() {
     }
 
     /**
+     * Attempts to save the image and handles all error cases with appropriate user feedback
+     */
+    private fun trySaveImage(bitmap: Bitmap) {
+        try {
+            val saved = saveImageToGallery(bitmap)
+            if (saved) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.image_saved_to_downloads),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Toast.makeText(
+                    this,
+                    getString(R.string.failed_to_save_image),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (e: IOException) {
+            val message = when {
+                e.message?.contains("ENOSPC", ignoreCase = true) == true -> "Storage full. Please free up space and try again."
+                e.message?.contains("EROFS", ignoreCase = true) == true -> "Storage is read-only. Cannot save image."
+                else -> "File system error. Unable to save image."
+            }
+            Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_LONG
+            ).show()
+            Log.e(TAG, "Failed to save image due to I/O error", e)
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Failed to save image: ${e.message ?: "Unknown error"}",
+                Toast.LENGTH_LONG
+            ).show()
+            Log.e(TAG, "Failed to save image due to unexpected error", e)
+        }
+    }
+
+    /**
      * Saves the translated image to the Downloads folder
      * Uses MediaStore API for Android 10+ and legacy file storage for older versions
      */
@@ -268,7 +283,7 @@ class CropActivity : AppCompatActivity() {
                 val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 uri?.let {
                     val success = contentResolver.openOutputStream(it)?.use { outputStream ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
                     } ?: false
                     if (success) {
                         Log.d(TAG, "Image saved to Downloads: $fileName")
@@ -277,6 +292,13 @@ class CropActivity : AppCompatActivity() {
                 } ?: false
             } else {
                 // Legacy storage for Android 9 and below
+                // Check if external storage is available and mounted
+                val storageState = Environment.getExternalStorageState()
+                if (storageState != Environment.MEDIA_MOUNTED) {
+                    Log.e(TAG, "External storage not available. State: $storageState")
+                    return false
+                }
+                
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 if (!downloadsDir.exists()) {
                     downloadsDir.mkdirs()
@@ -284,7 +306,7 @@ class CropActivity : AppCompatActivity() {
 
                 val imageFile = File(downloadsDir, fileName)
                 val success = FileOutputStream(imageFile).use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
                 }
 
                 if (success) {
@@ -318,29 +340,7 @@ class CropActivity : AppCompatActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted, try saving again
                 translatedBitmap?.let { bitmap ->
-                    try {
-                        val saved = saveImageToGallery(bitmap)
-                        if (saved) {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.image_saved_to_downloads),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.failed_to_save_image),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    } catch (e: SecurityException) {
-                        Toast.makeText(
-                            this,
-                            getString(R.string.permission_denied_storage),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        Log.e(TAG, "Failed to save image due to missing storage permission", e)
-                    }
+                    trySaveImage(bitmap)
                 }
             } else {
                 // Permission denied
