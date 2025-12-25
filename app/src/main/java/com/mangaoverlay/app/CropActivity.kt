@@ -160,25 +160,32 @@ class CropActivity : AppCompatActivity() {
                     // Update cancel button to "Save"
                     binding.cancelButton.text = getString(R.string.save)
                     binding.cancelButton.setOnClickListener {
-                        translatedBitmap?.let { bitmap ->
-                            // Check for WRITE_EXTERNAL_STORAGE permission on Android 9 and below
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                                if (ContextCompat.checkSelfPermission(
-                                        this@CropActivity,
-                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    // Request permission
-                                    ActivityCompat.requestPermissions(
-                                        this@CropActivity,
-                                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                                        REQUEST_WRITE_STORAGE
-                                    )
-                                    return@setOnClickListener
+                        // Disable the save button while the image is being saved
+                        binding.cancelButton.isEnabled = false
+                        try {
+                            translatedBitmap?.let { bitmap ->
+                                // Check for WRITE_EXTERNAL_STORAGE permission on Android 9 and below
+                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                    if (ContextCompat.checkSelfPermission(
+                                            this@CropActivity,
+                                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                        ) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        // Request permission
+                                        ActivityCompat.requestPermissions(
+                                            this@CropActivity,
+                                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                            REQUEST_WRITE_STORAGE
+                                        )
+                                        return@setOnClickListener
+                                    }
                                 }
+                                
+                                trySaveImage(bitmap)
                             }
-                            
-                            trySaveImage(bitmap)
+                        } finally {
+                            // Re-enable the button after the save attempt completes
+                            binding.cancelButton.isEnabled = true
                         }
                     }
                 } ?: run {
@@ -274,61 +281,63 @@ class CropActivity : AppCompatActivity() {
         val fileName = "manga_translated_$timestamp.jpg"
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Use MediaStore for Android 10+
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                }
+            // Use MediaStore for Android 10+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
 
-                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                uri?.let {
-                    val success = contentResolver.openOutputStream(it)?.use { outputStream ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
-                    } ?: run {
-                        Log.e(TAG, "Failed to open output stream for URI: $it")
-                        false
-                    }
-                    if (success) {
-                        Log.d(TAG, "Image saved to Downloads: $fileName")
-                    }
-                    success
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            uri?.let {
+                val success = contentResolver.openOutputStream(it)?.use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
                 } ?: run {
-                    Log.e(TAG, "Failed to insert image into MediaStore")
+                    Log.e(TAG, "Failed to open output stream for URI: $it")
+                    // Clean up the MediaStore entry since we couldn't write to it
+                    contentResolver.delete(it, null, null)
                     false
                 }
-        } else {
-                // Legacy storage for Android 9 and below
-                // Check if external storage is available and mounted
-                val storageState = Environment.getExternalStorageState()
-                if (storageState != Environment.MEDIA_MOUNTED) {
-                    throw IOException("External storage not available. State: $storageState")
-                }
-                
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (!downloadsDir.exists()) {
-                    val created = downloadsDir.mkdirs()
-                    if (!created && !downloadsDir.exists()) {
-                        throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
-                    }
-                }
-
-                val imageFile = File(downloadsDir, fileName)
-                val success = FileOutputStream(imageFile).use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
-                }
-
                 if (success) {
-                    // Notify media scanner about the new file using MediaScannerConnection
-                    MediaScannerConnection.scanFile(
-                        this,
-                        arrayOf(imageFile.absolutePath),
-                        arrayOf("image/jpeg"),
-                        null
-                    )
-                    Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
+                    Log.d(TAG, "Image saved to Downloads: $fileName")
                 }
                 success
+            } ?: run {
+                Log.e(TAG, "Failed to insert image into MediaStore")
+                false
+            }
+        } else {
+            // Legacy storage for Android 9 and below
+            // Check if external storage is available and mounted
+            val storageState = Environment.getExternalStorageState()
+            if (storageState != Environment.MEDIA_MOUNTED) {
+                throw IOException("External storage not available. State: $storageState")
+            }
+            
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) {
+                val created = downloadsDir.mkdirs()
+                if (!created && !downloadsDir.exists()) {
+                    throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
+                }
+            }
+
+            val imageFile = File(downloadsDir, fileName)
+            val success = FileOutputStream(imageFile).use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_COMPRESSION_QUALITY, outputStream)
+            }
+
+            if (success) {
+                // Notify media scanner about the new file using MediaScannerConnection
+                MediaScannerConnection.scanFile(
+                    this,
+                    arrayOf(imageFile.absolutePath),
+                    arrayOf("image/jpeg"),
+                    null
+                )
+                Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
+            }
+            success
         }
     }
 
@@ -354,11 +363,11 @@ class CropActivity : AppCompatActivity() {
                     ).show()
                 }
             } else {
-                // Permission denied
+                // Permission denied - keep save button enabled so user can retry
                 Toast.makeText(
                     this,
-                    getString(R.string.permission_denied_storage),
-                    Toast.LENGTH_SHORT
+                    getString(R.string.permission_denied_with_retry),
+                    Toast.LENGTH_LONG
                 ).show()
             }
         }
