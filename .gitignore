@@ -13,3 +13,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Ignore Serena and Claude files/folders
+.serena/
+.claude/
+*.serena
+*.claude
+
+*.md
