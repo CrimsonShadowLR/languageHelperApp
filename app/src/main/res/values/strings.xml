@@ -21,6 +21,11 @@
     <string name="confirm">Confirm</string>
     <string name="crop_and_translate">Crop &amp; Translate</string>
     <string name="save">Save</string>
+    <string name="done">Done</string>
+    <string name="translation_complete_instructions">Translation complete! Save or close.</string>
+    <string name="image_saved_to_downloads">Image saved to Downloads</string>
+    <string name="failed_to_save_image">Failed to save image</string>
+    <string name="permission_denied_storage">Permission denied. Please allow storage access to save images.</string>
 
     <!-- Loading dialog -->
     <string name="loading_analyzing_manga">Analyzing manga panel…</string>

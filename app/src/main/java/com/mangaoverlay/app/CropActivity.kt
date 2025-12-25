@@ -3,6 +3,7 @@ package com.mangaoverlay.app
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -139,10 +140,10 @@ class CropActivity : AppCompatActivity() {
                     translatedBitmap = editedBitmap
                     binding.cropView.setBitmap(editedBitmap)
                     binding.cropView.setShowCropUI(false)
-                    binding.instructionsText.text = "Translation complete! Save or close."
+                    binding.instructionsText.text = getString(R.string.translation_complete_instructions)
 
                     // Update confirm button to "Done"
-                    binding.confirmButton.text = "Done"
+                    binding.confirmButton.text = getString(R.string.done)
                     binding.confirmButton.setOnClickListener {
                         deleteScreenshotFile()
                         finish()
@@ -152,19 +153,28 @@ class CropActivity : AppCompatActivity() {
                     binding.cancelButton.text = getString(R.string.save)
                     binding.cancelButton.setOnClickListener {
                         translatedBitmap?.let { bitmap ->
-                            val saved = saveImageToGallery(bitmap)
-                            if (saved) {
+                            try {
+                                val saved = saveImageToGallery(bitmap)
+                                if (saved) {
+                                    Toast.makeText(
+                                        this@CropActivity,
+                                        getString(R.string.image_saved_to_downloads),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    Toast.makeText(
+                                        this@CropActivity,
+                                        getString(R.string.failed_to_save_image),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } catch (e: SecurityException) {
                                 Toast.makeText(
                                     this@CropActivity,
-                                    "Image saved to Downloads",
+                                    getString(R.string.permission_denied_storage),
                                     Toast.LENGTH_SHORT
                                 ).show()
-                            } else {
-                                Toast.makeText(
-                                    this@CropActivity,
-                                    "Failed to save image",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Log.e(TAG, "Failed to save image due to missing storage permission", e)
                             }
                         }
                     }
@@ -214,6 +224,12 @@ class CropActivity : AppCompatActivity() {
      * Uses MediaStore API for Android 10+ and legacy file storage for older versions
      */
     private fun saveImageToGallery(bitmap: Bitmap): Boolean {
+        val storageMethod = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "MediaStore"
+        } else {
+            "legacy storage"
+        }
+
         return try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val fileName = "manga_translated_$timestamp.jpg"
@@ -246,18 +262,19 @@ class CropActivity : AppCompatActivity() {
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
                 }
 
-                // Notify media scanner about the new file
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DATA, imageFile.absolutePath)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                }
-                contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                // Notify media scanner about the new file using MediaScannerConnection
+                MediaScannerConnection.scanFile(
+                    this,
+                    arrayOf(imageFile.absolutePath),
+                    arrayOf("image/jpeg"),
+                    null
+                )
 
                 Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
                 true
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save image", e)
+            Log.e(TAG, "Failed to save image using $storageMethod", e)
             false
         }
     }
