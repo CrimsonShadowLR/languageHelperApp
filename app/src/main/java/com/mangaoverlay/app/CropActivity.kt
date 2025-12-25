@@ -177,11 +177,13 @@ class CropActivity : AppCompatActivity() {
                             
                             // Disable the save button while the image is being saved
                             binding.cancelButton.isEnabled = false
-                            try {
-                                trySaveImage(bitmap)
-                            } finally {
-                                // Re-enable the button after the save attempt completes
-                                binding.cancelButton.isEnabled = true
+                            lifecycleScope.launch {
+                                try {
+                                    trySaveImage(bitmap)
+                                } finally {
+                                    // Re-enable the button after the save attempt completes
+                                    binding.cancelButton.isEnabled = true
+                                }
                             }
                         }
                     }
@@ -229,9 +231,11 @@ class CropActivity : AppCompatActivity() {
     /**
      * Attempts to save the image and handles all error cases with appropriate user feedback
      */
-    private fun trySaveImage(bitmap: Bitmap) {
+    private suspend fun trySaveImage(bitmap: Bitmap) {
         try {
-            val saved = saveImageToGallery(bitmap)
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                saveImageToGallery(bitmap)
+            }
             if (saved) {
                 Toast.makeText(
                     this,
@@ -249,6 +253,7 @@ class CropActivity : AppCompatActivity() {
             val messageResId = when {
                 e.message?.contains("ENOSPC", ignoreCase = true) == true -> R.string.error_storage_full
                 e.message?.contains("EROFS", ignoreCase = true) == true -> R.string.error_storage_read_only
+                e.message == "External storage is mounted read-only" -> R.string.error_storage_read_only
                 else -> R.string.error_file_system
             }
             Toast.makeText(
@@ -314,7 +319,7 @@ class CropActivity : AppCompatActivity() {
             val storageState = Environment.getExternalStorageState()
             when (storageState) {
                 Environment.MEDIA_MOUNTED_READ_ONLY -> {
-                    throw IOException(getString(R.string.error_storage_read_only))
+                    throw IOException("External storage is mounted read-only")
                 }
                 Environment.MEDIA_MOUNTED -> {
                     // Storage is available and writable, continue
@@ -364,10 +369,12 @@ class CropActivity : AppCompatActivity() {
                 val bitmap = translatedBitmap
                 if (bitmap != null) {
                     binding.cancelButton.isEnabled = false
-                    try {
-                        trySaveImage(bitmap)
-                    } finally {
-                        binding.cancelButton.isEnabled = true
+                    lifecycleScope.launch {
+                        try {
+                            trySaveImage(bitmap)
+                        } finally {
+                            binding.cancelButton.isEnabled = true
+                        }
                     }
                 } else {
                     // Image reference was lost between permission request and callback
