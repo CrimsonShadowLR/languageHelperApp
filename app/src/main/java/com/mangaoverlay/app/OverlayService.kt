@@ -217,24 +217,49 @@ class OverlayService : Service() {
         overlayView?.visibility = View.GONE
 
         // Capture the screen after a short delay to ensure button is hidden
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            captureManager.captureScreen { bitmap ->
-                // Show the button again
-                overlayView?.visibility = View.VISIBLE
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        
+        // Safety timeout to ensure button always reappears
+        val safetyTimeout = Runnable {
+            overlayView?.visibility = View.VISIBLE
+            android.util.Log.w("OverlayService", "Safety timeout triggered - button restored")
+        }
+        handler.postDelayed(safetyTimeout, 5000)
+        
+        handler.postDelayed({
+            try {
+                captureManager.captureScreen { bitmap ->
+                    // Cancel safety timeout since capture completed
+                    handler.removeCallbacks(safetyTimeout)
+                    
+                    // ALWAYS show the button again, even on error
+                    overlayView?.visibility = View.VISIBLE
 
-                if (bitmap != null) {
-                    // Save the bitmap to a temporary file
-                    val screenshotFile = saveBitmapToFile(bitmap)
-                    if (screenshotFile != null) {
-                        // Launch CropActivity
-                        launchCropActivity(screenshotFile.absolutePath)
+                    if (bitmap != null) {
+                        try {
+                            // Save the bitmap to a temporary file
+                            val screenshotFile = saveBitmapToFile(bitmap)
+                            if (screenshotFile != null) {
+                                // Launch CropActivity
+                                launchCropActivity(screenshotFile.absolutePath)
+                            } else {
+                                Toast.makeText(this, "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                            }
+                        } finally {
+                            // Always recycle bitmap to avoid memory leaks
+                            bitmap.recycle()
+                        }
                     } else {
-                        Toast.makeText(this, "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Failed to capture screen. Try restarting the overlay.", Toast.LENGTH_LONG).show()
                     }
-                    bitmap.recycle()
-                } else {
-                    Toast.makeText(this, "Failed to capture screen", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: Exception) {
+                // Cancel safety timeout and ensure button reappears
+                handler.removeCallbacks(safetyTimeout)
+                overlayView?.visibility = View.VISIBLE
+                val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
+                Toast.makeText(this, "Capture error: $errorMsg", Toast.LENGTH_LONG).show()
+                android.util.Log.e("OverlayService", "Screen capture failed", e)
             }
         }, 200)
     }
