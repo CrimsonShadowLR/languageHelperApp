@@ -27,6 +27,10 @@
     <string name="failed_to_save_image">Failed to save image</string>
     <string name="failed_to_save_image_error">Failed to save image: %s</string>
     <string name="unknown_error">Unknown error</string>
+    <string name="error_storage_full">Storage full. Please free up space and try again.</string>
+    <string name="error_storage_read_only">Storage is read-only. Cannot save image.</string>
+    <string name="error_file_system">File system error. Unable to save image.</string>
+    <string name="image_no_longer_available">Image is no longer available to save.</string>
     <string name="permission_denied_storage">Permission denied. Please allow storage access to save images.</string>
 
     <!-- Loading dialog -->

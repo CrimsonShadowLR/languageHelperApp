@@ -242,14 +242,14 @@ class CropActivity : AppCompatActivity() {
                 ).show()
             }
         } catch (e: IOException) {
-            val message = when {
-                e.message?.contains("ENOSPC", ignoreCase = true) == true -> "Storage full. Please free up space and try again."
-                e.message?.contains("EROFS", ignoreCase = true) == true -> "Storage is read-only. Cannot save image."
-                else -> "File system error. Unable to save image."
+            val messageResId = when {
+                e.message?.contains("ENOSPC", ignoreCase = true) == true -> R.string.error_storage_full
+                e.message?.contains("EROFS", ignoreCase = true) == true -> R.string.error_storage_read_only
+                else -> R.string.error_file_system
             }
             Toast.makeText(
                 this,
-                message,
+                getString(messageResId),
                 Toast.LENGTH_LONG
             ).show()
             Log.e(TAG, "Failed to save image due to I/O error", e)
@@ -267,13 +267,13 @@ class CropActivity : AppCompatActivity() {
     /**
      * Saves the translated image to the Downloads folder
      * Uses MediaStore API for Android 10+ and legacy file storage for older versions
+     * @throws IOException if storage is unavailable or file operations fail
      */
     private fun saveImageToGallery(bitmap: Bitmap): Boolean {
-        return try {
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val fileName = "manga_translated_$timestamp.jpg"
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileName = "manga_translated_$timestamp.jpg"
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 // Use MediaStore for Android 10+
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -297,7 +297,7 @@ class CropActivity : AppCompatActivity() {
                     Log.e(TAG, "Failed to insert image into MediaStore")
                     false
                 }
-            } else {
+        } else {
                 // Legacy storage for Android 9 and below
                 // Check if external storage is available and mounted
                 val storageState = Environment.getExternalStorageState()
@@ -307,7 +307,10 @@ class CropActivity : AppCompatActivity() {
                 
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 if (!downloadsDir.exists()) {
-                    downloadsDir.mkdirs()
+                    val created = downloadsDir.mkdirs()
+                    if (!created && !downloadsDir.exists()) {
+                        throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
+                    }
                 }
 
                 val imageFile = File(downloadsDir, fileName)
@@ -326,12 +329,6 @@ class CropActivity : AppCompatActivity() {
                     Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
                 }
                 success
-            }
-        } catch (e: Exception) {
-            val apiLevel = Build.VERSION.SDK_INT
-            val method = if (apiLevel >= Build.VERSION_CODES.Q) "MediaStore API" else "legacy file storage"
-            Log.e(TAG, "Failed to save image using $method (Android API $apiLevel)", e)
-            false
         }
     }
 
@@ -345,8 +342,16 @@ class CropActivity : AppCompatActivity() {
         if (requestCode == REQUEST_WRITE_STORAGE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted, try saving again
-                translatedBitmap?.let { bitmap ->
+                val bitmap = translatedBitmap
+                if (bitmap != null) {
                     trySaveImage(bitmap)
+                } else {
+                    // Image reference was lost between permission request and callback
+                    Toast.makeText(
+                        this,
+                        getString(R.string.image_no_longer_available),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } else {
                 // Permission denied
