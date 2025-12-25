@@ -257,7 +257,8 @@ class OverlayService : Service() {
                 // Cancel safety timeout and ensure button reappears
                 handler.removeCallbacks(safetyTimeout)
                 overlayView?.visibility = View.VISIBLE
-                Toast.makeText(this, "Capture error: ${e.message}", Toast.LENGTH_LONG).show()
+                val errorMsg = e.localizedMessage ?: e.message ?: "Unknown error"
+                Toast.makeText(this, "Capture error: $errorMsg", Toast.LENGTH_LONG).show()
                 android.util.Log.e("OverlayService", "Screen capture failed", e)
             }
         }, 200)

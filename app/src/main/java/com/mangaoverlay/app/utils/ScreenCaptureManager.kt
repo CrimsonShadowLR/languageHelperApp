@@ -68,6 +68,9 @@ class ScreenCaptureManager(private val context: Context) {
             return
         }
 
+        // Declare timeout runnable outside try block so it can be canceled in catch block
+        var timeoutRunnable: Runnable? = null
+
         try {
             // Get current screen dimensions
             val metrics = DisplayMetrics()
@@ -127,10 +130,11 @@ class ScreenCaptureManager(private val context: Context) {
             imageReader?.setOnImageAvailableListener(null, null)
             
             // Flag to prevent duplicate callback invocations
+            // Note: Access is synchronized via Handler threads, ensuring thread safety
             var callbackInvoked = false
             
             // Timeout runnable
-            val timeoutRunnable = Runnable {
+            timeoutRunnable = Runnable {
                 if (!callbackInvoked) {
                     callbackInvoked = true
                     android.util.Log.e("ScreenCaptureManager", "Timeout waiting for image")
@@ -145,7 +149,7 @@ class ScreenCaptureManager(private val context: Context) {
                 if (!callbackInvoked) {
                     callbackInvoked = true
                     // Cancel timeout since we got an image
-                    handler.removeCallbacks(timeoutRunnable)
+                    handler.removeCallbacks(timeoutRunnable!!)
                     
                     var image: Image? = null
                     try {
@@ -177,10 +181,12 @@ class ScreenCaptureManager(private val context: Context) {
             }, handler)
 
             // Schedule timeout (3 seconds)
-            handler.postDelayed(timeoutRunnable, 3000)
+            handler.postDelayed(timeoutRunnable!!, 3000)
 
         } catch (e: Exception) {
             android.util.Log.e("ScreenCaptureManager", "Error setting up screen capture", e)
+            // Cancel timeout if it was scheduled
+            timeoutRunnable?.let { handler.removeCallbacks(it) }
             // Post callback to main thread for UI operations
             mainHandler.post { callback(null) }
         }
