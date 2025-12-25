@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -151,7 +152,7 @@ class CropActivity : AppCompatActivity() {
                     binding.confirmButton.text = getString(R.string.done)
                     binding.confirmButton.setOnClickListener {
                         // Prevent finishing the activity while a save operation is in progress
-                        if (saveJob != null && saveJob?.isActive == true) {
+                        if (saveJob?.isActive == true) {
                             Toast.makeText(
                                 this@CropActivity,
                                 getString(R.string.save_in_progress),
@@ -183,6 +184,16 @@ class CropActivity : AppCompatActivity() {
                                     )
                                     return@setOnClickListener
                                 }
+                            }
+                            
+                            // Check if bitmap is still valid before saving
+                            if (bitmap.isRecycled) {
+                                Toast.makeText(
+                                    this@CropActivity,
+                                    getString(R.string.image_no_longer_available),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@setOnClickListener
                             }
                             
                             // Disable the save button while the image is being saved
@@ -369,6 +380,13 @@ class CropActivity : AppCompatActivity() {
             }
 
             if (success) {
+                // Trigger media scan to make the file immediately visible in gallery and file managers
+                android.media.MediaScannerConnection.scanFile(
+                    this,
+                    arrayOf(imageFile.absolutePath),
+                    arrayOf("image/jpeg"),
+                    null
+                )
                 Log.d(TAG, "Image saved to Downloads: ${imageFile.absolutePath}")
             }
             success
@@ -405,8 +423,15 @@ class CropActivity : AppCompatActivity() {
                     ).show()
                 }
             } else {
-                // Permission denied - re-enable save button so user can retry
+                // Permission denied
+                val permissionDeniedPermanently = !ActivityCompat.shouldShowRequestPermissionRationale(
+                    this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+                
+                // Re-enable save button so user can retry
                 binding.cancelButton.isEnabled = true
+                
                 Toast.makeText(
                     this,
                     getString(R.string.permission_denied_with_retry),
