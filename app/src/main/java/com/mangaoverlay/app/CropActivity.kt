@@ -229,7 +229,8 @@ class CropActivity : AppCompatActivity() {
     }
 
     /**
-     * Attempts to save the image and handles all error cases with appropriate user feedback
+     * Attempts to save the image and handles all error cases with appropriate user feedback.
+     * Runs the I/O operation on background thread using withContext(Dispatchers.IO).
      */
     private suspend fun trySaveImage(bitmap: Bitmap) {
         try {
@@ -253,7 +254,7 @@ class CropActivity : AppCompatActivity() {
             val messageResId = when {
                 e.message?.contains("ENOSPC", ignoreCase = true) == true -> R.string.error_storage_full
                 e.message?.contains("EROFS", ignoreCase = true) == true -> R.string.error_storage_read_only
-                e.message == "External storage is mounted read-only" -> R.string.error_storage_read_only
+                e.message?.contains("read-only", ignoreCase = true) == true -> R.string.error_storage_read_only
                 else -> R.string.error_file_system
             }
             Toast.makeText(
@@ -330,11 +331,8 @@ class CropActivity : AppCompatActivity() {
             }
             
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir.exists()) {
-                val created = downloadsDir.mkdirs()
-                if (!created && !downloadsDir.exists()) {
-                    throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
-                }
+            if (!downloadsDir.exists() && !downloadsDir.mkdirs()) {
+                throw IOException("Failed to create downloads directory at: ${downloadsDir.absolutePath}")
             }
 
             val imageFile = File(downloadsDir, fileName)
@@ -367,7 +365,7 @@ class CropActivity : AppCompatActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted, try saving again
                 val bitmap = translatedBitmap
-                if (bitmap != null) {
+                if (bitmap != null && !bitmap.isRecycled) {
                     binding.cancelButton.isEnabled = false
                     lifecycleScope.launch {
                         try {
@@ -377,7 +375,7 @@ class CropActivity : AppCompatActivity() {
                         }
                     }
                 } else {
-                    // Image reference was lost between permission request and callback
+                    // Image reference was lost or recycled between permission request and callback
                     Toast.makeText(
                         this,
                         getString(R.string.image_no_longer_available),
